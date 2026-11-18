@@ -94,18 +94,29 @@ def test_clean_batch_flows_from_upstream_to_totals(sandbox: Path) -> None:
     assert re.search(rf"orders={len(orders)} revenue={revenue:.2f} waiting=0$", first_line.rstrip())
 
 
-def test_schema_drift_crashes_pipeline_and_leaves_batch_in_landing(sandbox: Path) -> None:
+def test_schema_drift_batch_loads_total_amount_into_order_total(sandbox: Path) -> None:
     batch = generate_batch(sandbox, "schema_drift")
+    orders = json.loads(batch.read_text())
+    assert orders
+    assert all("total_amount" in o and "order_total" not in o for o in orders)
 
     pipeline = start(sandbox, "pipeline/run.py")
-    _, err = pipeline.communicate(timeout=TIMEOUT)
+    processed_file = sandbox / "data/processed" / batch.name
+    deadline = time.monotonic() + TIMEOUT
+    while not processed_file.exists() and time.monotonic() < deadline and pipeline.poll() is None:
+        time.sleep(0.1)
+    out, err = stop(pipeline)
 
-    assert pipeline.returncode != 0
-    assert "KeyError: 'order_total'" in err
-    assert batch.exists()
-    assert list((sandbox / "data/processed").iterdir()) == []
+    assert processed_file.exists(), err
+    assert not batch.exists()
+    assert out == f"loaded {batch.name} orders={len(orders)}\n"
     conn = sqlite3.connect(sandbox / "data/orders.db")
     try:
-        assert conn.execute("SELECT COUNT(*) FROM orders").fetchone() == (0,)
+        stored = conn.execute(
+            "SELECT order_id, customer_id, order_total, currency, created_at FROM orders ORDER BY order_id"
+        ).fetchall()
     finally:
         conn.close()
+    assert stored == sorted(
+        (o["order_id"], o["customer_id"], o["total_amount"], o["currency"], o["created_at"]) for o in orders
+    )

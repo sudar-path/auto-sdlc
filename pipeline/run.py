@@ -3,6 +3,7 @@ import json
 import os
 import sqlite3
 import time
+from typing import Any
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LANDING = os.path.join(ROOT, "data", "landing")
@@ -22,11 +23,28 @@ def connect(db: str) -> sqlite3.Connection:
     return conn
 
 
+def order_total(order: dict[str, Any]) -> Any:
+    """Return an order's total from ``order_total`` or its upstream rename ``total_amount``.
+
+    Raises ``KeyError`` if neither is present and ``ValueError`` if both are present with different values.
+    """
+    if "order_total" not in order:
+        if "total_amount" in order:
+            return order["total_amount"]
+        raise KeyError("order_total")
+    if "total_amount" in order and order["total_amount"] != order["order_total"]:
+        raise ValueError(
+            "order %s has conflicting order_total=%r and total_amount=%r"
+            % (order.get("order_id"), order["order_total"], order["total_amount"])
+        )
+    return order["order_total"]
+
+
 def load_file(conn: sqlite3.Connection, path: str, processed: str) -> int:
     """Load one order file in a single transaction, then move it into ``processed``.
 
-    Any error (malformed JSON, missing field, duplicate order_id) rolls back the whole
-    file and leaves it in landing. Returns the number of orders loaded.
+    Any error (malformed JSON, missing field, conflicting totals, duplicate order_id) rolls back
+    the whole file and leaves it in landing. Returns the number of orders loaded.
     """
     with open(path) as f:
         orders = json.load(f)
@@ -34,7 +52,7 @@ def load_file(conn: sqlite3.Connection, path: str, processed: str) -> int:
         for o in orders:
             conn.execute(
                 "INSERT INTO orders (order_id, customer_id, order_total, currency, created_at) VALUES (?, ?, ?, ?, ?)",
-                (o["order_id"], o["customer_id"], o["order_total"], o["currency"], o["created_at"]),
+                (o["order_id"], o["customer_id"], order_total(o), o["currency"], o["created_at"]),
             )
     os.replace(path, os.path.join(processed, os.path.basename(path)))
     print("loaded %s orders=%d" % (os.path.basename(path), len(orders)), flush=True)
