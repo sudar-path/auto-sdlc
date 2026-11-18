@@ -62,7 +62,7 @@ quote-style = "double"
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["pipeline", "tools", "tests"]
+files = ["pipeline", "tools", "monitor", "responder", "tests"]
 explicit_package_bases = true
 exclude = ["^upstream/"]
 
@@ -90,7 +90,7 @@ markers = [
 # Coverage is opt-in so single-file runs stay fast; the full suite and CI run `pytest --cov`.
 [tool.coverage.run]
 branch = true
-source = ["pipeline", "tools"]
+source = ["pipeline", "tools", "monitor", "responder"]
 
 [tool.coverage.report]
 fail_under = 90
