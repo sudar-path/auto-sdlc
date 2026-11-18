@@ -1,0 +1,6 @@
+# Default owner for everything in this repository.
+* @sudar-path
+
+# upstream/ simulates another team's orders system and is read-only for this project;
+# any change there needs explicit owner sign-off.
+/upstream/ @sudar-path

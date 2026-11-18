@@ -1,4 +1,37 @@
+# Runtime data written by the scripts (landing/processed files, orders.db)
 data/
-.venv/
-__pycache__/
+
+# Environment and secrets: keep the template, ignore real values
 .env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Tool caches and reports
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+reports/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
