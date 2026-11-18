@@ -1,0 +1,36 @@
+# Install once per clone: pre-commit install
+# Tool versions here must match the pins in pyproject.toml [dependency-groups].dev.
+# upstream/ is read-only (another team's system), so no hook may touch it.
+exclude: ^upstream/
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: ruff check --fix
+        language: python
+        additional_dependencies: ["ruff==0.17.5"]
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: ruff format
+        language: python
+        additional_dependencies: ["ruff==0.17.5"]
+        types: [python]
+      - id: mypy
+        name: mypy (strict)
+        entry: mypy
+        language: python
+        additional_dependencies: ["mypy==2.4.1", "pytest==9.2.0"]
+        types: [python]
+        pass_filenames: false

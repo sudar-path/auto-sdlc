@@ -3,7 +3,7 @@ import os
 import sqlite3
 import time
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LANDING = os.path.join(ROOT, "data", "landing")
@@ -11,13 +11,14 @@ DB = os.path.join(ROOT, "data", "orders.db")
 INTERVAL = 2
 
 
-def read_totals():
-    if not os.path.exists(DB):
+def read_totals(db: str) -> tuple[int, float] | None:
+    if not os.path.exists(db):
         return None
     # mode=ro never creates the file or takes a write lock, so this can't interfere with the pipeline.
-    conn = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(DB), uri=True)
+    conn = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(db), uri=True)
     try:
-        return conn.execute("SELECT COUNT(*), COALESCE(SUM(order_total), 0) FROM orders").fetchone()
+        count, revenue = conn.execute("SELECT COUNT(*), COALESCE(SUM(order_total), 0) FROM orders").fetchone()
+        return count, revenue
     except sqlite3.OperationalError:
         # The pipeline creates the table just after creating the file.
         return None
@@ -25,12 +26,12 @@ def read_totals():
         conn.close()
 
 
-def main():
+def main() -> None:
     try:
         while True:
-            ts = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            ts = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
             waiting = len(glob.glob(os.path.join(LANDING, "orders_*.json")))
-            totals = read_totals()
+            totals = read_totals(DB)
             if totals is None:
                 print("%s orders=- revenue=- waiting=%d (no database yet)" % (ts, waiting), flush=True)
             else:

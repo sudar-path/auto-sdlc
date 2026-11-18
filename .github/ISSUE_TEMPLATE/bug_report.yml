@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in the pipeline or tools behaves incorrectly
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - pipeline/run.py (loader)
+        - tools/totals.py
+        - tests / CI
+        - docs
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include the exact output or traceback.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Commands run, and the FAULT value used for upstream/generate.py, if any.
+      placeholder: |
+        1. FAULT=null_spike python upstream/generate.py --once
+        2. python pipeline/run.py
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample order file (optional)
+      description: Contents of the offending data/landing/orders_*.json, with customer IDs redacted if real.
+      render: json
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: Output of `git rev-parse --short HEAD`

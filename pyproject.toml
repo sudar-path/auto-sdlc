@@ -1,0 +1,97 @@
+[project]
+name = "brightcart-orders-pipeline"
+version = "0.1.0"
+description = "Loads Brightcart order files from a landing directory into SQLite."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+# Runtime is stdlib only (json, sqlite3). Keep it that way unless there is a strong reason.
+dependencies = []
+
+[dependency-groups]
+# Install with: pip install --group dev   (needs pip >= 25.1)
+dev = [
+    "mypy==2.4.1",
+    "pre-commit==4.7.0",
+    "pytest==9.2.0",
+    "pytest-cov==7.1.0",
+    "ruff==0.17.5",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+# upstream/ simulates another team's system and is read-only here, so findings in it are not actionable.
+extend-exclude = ["upstream"]
+# Apply the exclude even when tools (pre-commit, editors) pass upstream files explicitly.
+force-exclude = true
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes: unused imports/variables, undefined names
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "C90",  # mccabe cyclomatic complexity
+    "PL",   # pylint rules
+    "ERA",  # commented-out (dead) code
+    "TD",   # TODOs must name an owner and link an issue
+    "PT",   # pytest style
+]
+ignore = [
+    "UP031",  # %-formatting is used deliberately for log lines; output format is part of the contract
+    "TD002",  # owner is optional; an issue link (TD003) is what we track
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 6
+max-statements = 40
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004"]  # literal expected values are fine in assertions
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["pipeline", "tools", "tests"]
+explicit_package_bases = true
+exclude = ["^upstream/"]
+
+[[tool.mypy.overrides]]
+# Tests import upstream/generate.py (read-only, untyped) to produce real order files.
+module = ["upstream.*"]
+follow_imports = "skip"
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+pythonpath = ["."]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--durations=10",
+]
+markers = [
+    "integration: runs the real scripts as subprocesses against a temporary copy of the repo",
+]
+
+# Coverage is opt-in so single-file runs stay fast; the full suite and CI run `pytest --cov`.
+[tool.coverage.run]
+branch = true
+source = ["pipeline", "tools"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
