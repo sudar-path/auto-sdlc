@@ -3,7 +3,6 @@ import json
 import os
 import sqlite3
 import time
-from typing import Any
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LANDING = os.path.join(ROOT, "data", "landing")
@@ -23,18 +22,6 @@ def connect(db: str) -> sqlite3.Connection:
     return conn
 
 
-def order_total(o: dict[str, Any]) -> Any:
-    """Return the order amount, accepting ``total_amount`` as an alias for ``order_total``.
-
-    ``order_total`` wins when both are present. Raises ``KeyError('order_total')`` when neither is.
-    """
-    if "order_total" in o:
-        return o["order_total"]
-    if "total_amount" in o:
-        return o["total_amount"]
-    raise KeyError("order_total")
-
-
 def load_file(conn: sqlite3.Connection, path: str, processed: str) -> int:
     """Load one order file in a single transaction, then move it into ``processed``.
 
@@ -47,7 +34,7 @@ def load_file(conn: sqlite3.Connection, path: str, processed: str) -> int:
         for o in orders:
             conn.execute(
                 "INSERT INTO orders (order_id, customer_id, order_total, currency, created_at) VALUES (?, ?, ?, ?, ?)",
-                (o["order_id"], o["customer_id"], order_total(o), o["currency"], o["created_at"]),
+                (o["order_id"], o["customer_id"], o["order_total"], o["currency"], o["created_at"]),
             )
     os.replace(path, os.path.join(processed, os.path.basename(path)))
     print("loaded %s orders=%d" % (os.path.basename(path), len(orders)), flush=True)
