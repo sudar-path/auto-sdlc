@@ -5,11 +5,24 @@ from pathlib import Path
 import pytest
 
 from pipeline import run
-from tests.factories import order, write_order_file
+from tests.factories import Order, order, write_order_file
 
 
 def rows(conn: sqlite3.Connection) -> list[tuple[str, float]]:
     return conn.execute("SELECT order_id, order_total FROM orders ORDER BY order_id").fetchall()
+
+
+def drifted_order(order_id: str, total: float) -> Order:
+    """An order that names its amount ``total_amount`` instead of ``order_total``."""
+    o = order(order_id, total)
+    o["total_amount"] = o.pop("order_total")
+    return o
+
+
+def missing_amount_order(order_id: str) -> Order:
+    o = order(order_id, 1)
+    del o["order_total"]
+    return o
 
 
 def test_connect_creates_orders_table_with_contract_columns(conn: sqlite3.Connection) -> None:
@@ -102,10 +115,76 @@ def test_null_customer_id_is_loaded_as_null(conn: sqlite3.Connection, landing: P
     assert conn.execute("SELECT customer_id FROM orders").fetchall() == [(None,)]
 
 
+def test_total_amount_alias_is_stored_as_order_total(
+    conn: sqlite3.Connection, landing: Path, processed: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Incident #9: upstream sent total_amount instead of order_total and the loader crashed.
+    orders = [drifted_order("ord_1", 60.16), drifted_order("ord_2", 0)]
+    path = write_order_file(landing, "orders_20261120T161220511487Z_0001.json", orders)
+
+    assert run.load_file(conn, str(path), str(processed)) == 2
+
+    stored = conn.execute(
+        "SELECT order_id, customer_id, order_total, currency, created_at FROM orders ORDER BY order_id"
+    ).fetchall()
+    assert stored == [
+        ("ord_1", "cust_0001", 60.16, "USD", "2026-11-18T00:00:00Z"),
+        ("ord_2", "cust_0001", 0.0, "USD", "2026-11-18T00:00:00Z"),
+    ]
+    assert not path.exists()
+    assert (processed / path.name).exists()
+    assert capsys.readouterr().out == "loaded orders_20261120T161220511487Z_0001.json orders=2\n"
+
+
+def test_file_mixing_order_total_and_total_amount_loads_every_order(
+    conn: sqlite3.Connection, landing: Path, processed: Path
+) -> None:
+    path = write_order_file(
+        landing, "orders_a_0001.json", [order("ord_1", 10.5), drifted_order("ord_2", 4.25), order("ord_3", 1)]
+    )
+
+    assert run.load_file(conn, str(path), str(processed)) == 3
+
+    assert rows(conn) == [("ord_1", 10.5), ("ord_2", 4.25), ("ord_3", 1.0)]
+    assert (processed / path.name).exists()
+
+
+def test_order_total_wins_when_both_amount_fields_are_present(
+    conn: sqlite3.Connection, landing: Path, processed: Path
+) -> None:
+    path = write_order_file(landing, "orders_a_0001.json", [{**order("ord_1", 7), "total_amount": 99}])
+
+    run.load_file(conn, str(path), str(processed))
+
+    assert rows(conn) == [("ord_1", 7.0)]
+
+
+def test_process_landing_drains_backlog_after_drifted_file(
+    conn: sqlite3.Connection, landing: Path, processed: Path
+) -> None:
+    write_order_file(landing, "orders_a_0001.json", [drifted_order("ord_a", 1)])
+    write_order_file(landing, "orders_b_0002.json", [order("ord_b", 2)])
+
+    assert run.process_landing(conn, str(landing), str(processed)) == 2
+
+    assert rows(conn) == [("ord_a", 1.0), ("ord_b", 2.0)]
+    assert list(landing.iterdir()) == []
+
+
+def test_missing_amount_field_still_raises_key_error_naming_order_total(
+    conn: sqlite3.Connection, landing: Path, processed: Path
+) -> None:
+    path = write_order_file(landing, "orders_f_0001.json", [missing_amount_order("ord_bad")])
+
+    with pytest.raises(KeyError, match="'order_total'"):
+        run.load_file(conn, str(path), str(processed))
+
+
 @pytest.mark.parametrize(
     ("bad_order", "error"),
     [
-        pytest.param({"order_id": "ord_bad", "customer_id": "c", "total_amount": 5}, KeyError, id="schema_drift"),
+        pytest.param(missing_amount_order("ord_bad"), KeyError, id="missing_amount_field"),
+        pytest.param({"order_id": "ord_bad", "customer_id": "c", "total_amount": 5}, KeyError, id="missing_fields"),
         pytest.param(order("ord_1", 3), sqlite3.IntegrityError, id="duplicate_order_id"),
     ],
 )
